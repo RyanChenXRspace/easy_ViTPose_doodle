@@ -269,6 +269,11 @@ class VitInference:
 
         if ids is None:
             ids = range(len(bboxes))
+            
+        if len(bboxes) == 0:
+            bboxes = np.array([[0, 0, img.shape[1], img.shape[0]]])
+            scores = np.array([1.0])
+            ids = range(len(bboxes))
 
         if len(bboxes) == 0:
             
