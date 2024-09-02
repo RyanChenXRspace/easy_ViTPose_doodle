@@ -4,8 +4,12 @@
 **/__pycache__
 **/coco/
 .DS_Store
-runs
+**/runs
+**/datasets/*
+**/wandb/*
 ckpts
+input
+output
 annotations
 examples
 outputs

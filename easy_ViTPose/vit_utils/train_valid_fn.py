@@ -1,5 +1,5 @@
 import os.path as osp
-
+import os
 import torch
 import torch.nn as nn
 
@@ -12,12 +12,15 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR, MultiStepLR
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
-from torch.cuda.amp import autocast, GradScaler
+# from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from tqdm import tqdm
 from time import time
 
 from vit_utils.dist_util import get_dist_info, init_dist
 from vit_utils.logging import get_root_logger
+from collections import deque
+import wandb
 
 @torch.no_grad()
 def valid_model(model: nn.Module, dataloaders: DataLoader, criterion: nn.Module, cfg: dict) -> None:
@@ -111,6 +114,11 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
     #===================================# 
     ''')
     
+    # Deque to store the latest 5 checkpoint filenames
+    best_val_loss = float('inf')
+    best_ckpt_path = None    
+    ckpt_queue = deque(maxlen=5)
+    
     global_step = 0
     for dataloader in dataloaders_train:
         for epoch in range(cfg.total_epochs):
@@ -121,13 +129,16 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
             for batch_idx, batch in enumerate(train_pbar):
                 layerwise_optimizer.zero_grad()
                     
-                images, targets, target_weights, __ = batch
+                images, targets, target_weights, _ = batch
                 images = images.to('cuda')
                 targets = targets.to('cuda')
                 target_weights = target_weights.to('cuda')
                 
+                if cfg.enable_wandb and batch_idx % 1000 == 0:
+                    wandb.log({"images": [wandb.Image(im) for im in images]})
+                
                 if cfg.use_amp:
-                    with autocast():
+                    with autocast(device_type="cuda"):
                         outputs = model(images)
                         loss = criterion(outputs, targets, target_weights)
                     scaler.scale(loss).backward()
@@ -154,9 +165,29 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
             ckpt_name = f"epoch{str(epoch).zfill(3)}.pth"
             ckpt_path = osp.join(cfg.work_dir, ckpt_name)
             torch.save(model.module.state_dict(), ckpt_path)
-
+            
+            # Manage checkpoints
+            ckpt_queue.append(ckpt_path)
+            if len(ckpt_queue) >= ckpt_queue.maxlen:
+                oldest_ckpt = ckpt_queue.popleft()
+                os.remove(oldest_ckpt)
+            
             # validation
             if validate:
                 tic2 = time()
                 avg_loss_valid = valid_model(model, dataloaders_valid, criterion, cfg)
                 logger.info(f"[Summary-valid] Epoch [{str(epoch).zfill(3)}/{str(cfg.total_epochs).zfill(3)}] | Average Loss (valid) {avg_loss_valid:.4f} --- {time()-tic2:.5f} sec. elapsed")
+                
+                # Track best model with minimum validation loss
+                if avg_loss_valid < best_val_loss:
+                    best_val_loss = avg_loss_valid
+                    best_ckpt_path = osp.join(cfg.work_dir, "best_model.pth")
+                    torch.save(model.module.state_dict(), best_ckpt_path)
+                    logger.info(f"New best model saved (epoch: {epoch}) with validation loss {best_val_loss:.4f} at {best_ckpt_path}")
+                
+                
+                if cfg.enable_wandb:
+                    wandb.log({"epoch": epoch + 1, "train_loss": avg_loss_train, "val_loss": avg_loss_valid})
+            else:
+                if cfg.enable_wandb:
+                    wandb.log({"epoch": epoch + 1, "train_loss": avg_loss_train})

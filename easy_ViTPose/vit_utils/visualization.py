@@ -10,6 +10,34 @@ __all__ = ["joints_dict", "draw_points_and_skeleton"]
 
 def joints_dict():
     joints = {
+        "doodle": {
+            "keypoints": {
+                0: "nose",
+                1: "left_eye",
+                2: "right_eye",
+                3: "left_ear",
+                4: "right_ear",
+                5: "neck",
+                6: "left_shoulder",
+                7: "right_shoulder",
+                8: "left_elbow",
+                9: "right_elbow",
+                10: "left_wrist",
+                11: "right_wrist",
+                12: "left_hip",
+                13: "right_hip",
+                14: "hip",
+                15: "left_knee",
+                16: "right_knee",
+                17: "left_ankle",
+                18: "right_ankle",
+            },
+            "skeleton": [
+                [17, 15], [15, 12], [18, 16], [16, 13], [12, 14], [13, 14], [5, 14],
+                [6, 5], [7, 5], [6, 8], [7, 9], [8, 10], [9, 11], [1, 2], [0, 1], [0, 2],
+                [1, 3], [2, 4], [5, 0]
+            ]
+        },
         "coco_25": {
             "keypoints": {
                 0: "nose",
@@ -331,7 +359,7 @@ def joints_dict():
     return joints
 
 
-def draw_points(image, points, color_palette='tab20', palette_samples=16, confidence_threshold=0.5):
+def draw_points(image, points, keypoints, color_palette='tab20', palette_samples=16, confidence_threshold=0.5):
     """
     Draws `points` on `image`.
 
@@ -364,6 +392,8 @@ def draw_points(image, points, color_palette='tab20', palette_samples=16, confid
     # circle_size = max(2, int(np.sqrt(np.max(np.max(points, axis=0) - np.min(points, axis=0)) // 16)))
 
     for i, pt in enumerate(points):
+        if i not in keypoints:
+            continue
         if pt[2] > confidence_threshold:
             image = cv2.circle(image, (int(pt[1]), int(pt[0])), circle_size, tuple(colors[i % len(colors)]), -1)
 
@@ -408,6 +438,7 @@ def draw_skeleton(image, points, skeleton, color_palette='Set2', palette_samples
     for i, joint in enumerate(skeleton):
         pt1, pt2 = points[joint]
         if pt1[2] > confidence_threshold and pt2[2] > confidence_threshold:
+            # print(f'{image.shape} ({int(pt1[1])}, {int(pt1[0])}) ({int(pt2[1])}, {int(pt2[0])})')
             image = cv2.line(
                 image, (int(pt1[1]), int(pt1[0])), (int(pt2[1]), int(pt2[0])),
                 tuple(colors[person_index % len(colors)]), 2
@@ -416,7 +447,7 @@ def draw_skeleton(image, points, skeleton, color_palette='Set2', palette_samples
     return image
 
 
-def draw_points_and_skeleton(image, points, skeleton, points_color_palette='tab20', points_palette_samples=16,
+def draw_points_and_skeleton(image, points, keypoints, skeleton, points_color_palette='tab20', points_palette_samples=16,
                              skeleton_color_palette='Set2', skeleton_palette_samples=8, person_index=0,
                              confidence_threshold=0.5):
     """
@@ -427,6 +458,8 @@ def draw_points_and_skeleton(image, points, skeleton, points_color_palette='tab2
         points: list of points to be drawn.
             Shape: (nof_points, 3)
             Format: each point should contain (y, x, confidence)
+        keypoints: list of joints of interest
+            Format: joint index (idx)
         skeleton: list of joints to be drawn
             Shape: (nof_joints, 2)
             Format: each joint should contain (point_a, point_b) where `point_a` and `point_b` are an index in `points`
@@ -450,13 +483,15 @@ def draw_points_and_skeleton(image, points, skeleton, points_color_palette='tab2
     image = draw_skeleton(image, points, skeleton, color_palette=skeleton_color_palette,
                           palette_samples=skeleton_palette_samples, person_index=person_index,
                           confidence_threshold=confidence_threshold)
-    image = draw_points(image, points, color_palette=points_color_palette, palette_samples=points_palette_samples,
+    image = draw_points(image, points, keypoints, color_palette=points_color_palette, palette_samples=points_palette_samples,
                         confidence_threshold=confidence_threshold)
     return image
 
 
-def save_images(images, target, joint_target, output, joint_output, joint_visibility, summary_writer=None, step=0,
-                prefix=''):
+def save_images(
+    images, target, joint_target, output, joint_output, joint_visibility, summary_writer=None, step=0,
+                prefix=''
+):
     """
     Creates a grid of images with gt joints and a grid with predicted joints.
     This is a basic function for debugging purposes only.

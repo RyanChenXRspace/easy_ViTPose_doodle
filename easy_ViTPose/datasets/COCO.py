@@ -97,7 +97,7 @@ class COCODataset(Dataset):
 
         # Image & annotation path
         self.data_path = f"{root_path}/{data_version}"
-        self.annotation_path = f"{root_path}/annotations/person_keypoints_{data_version}.json"
+        self.annotation_path = os.path.abspath(f"{root_path}/annotations/person_keypoints_{data_version}.json")
 
         self.image_size = (image_width, image_height)
         self.aspect_ratio = image_width * 1.0 / image_height
@@ -169,7 +169,7 @@ class COCODataset(Dataset):
                         continue
 
                     # ignore objs without keypoints annotation
-                    if max(obj['keypoints']) == 0 and max(obj['foot_kpts']) == 0:
+                    if max(obj['keypoints']) == 0: # and max(obj['foot_kpts']) == 0:
                         continue
 
                     x, y, w, h = obj['bbox']
@@ -190,11 +190,11 @@ class COCODataset(Dataset):
 
             # for each annotation of this image, add the formatted annotation to self.data
             for obj in objs:
-                joints = np.zeros((self.num_joints, 2), dtype=np.float)
-                joints_visibility = np.ones((self.num_joints, 2), dtype=np.float)
+                joints = np.zeros((self.num_joints, 2), dtype=np.float32)
+                joints_visibility = np.ones((self.num_joints, 2), dtype=np.float32)
 
                 # Add foot data to keypoints
-                obj['keypoints'].extend(obj['foot_kpts'])
+                # obj['keypoints'].extend(obj['foot_kpts'])
 
                 if self.use_gt_bboxes:
                     """ COCO pre-processing
@@ -215,8 +215,11 @@ class COCODataset(Dataset):
                     vjoints.remove(14)
 
                     for idx, pt in enumerate(vjoints):
-                        if pt == 5 or pt == 14:
-                            continue  # Neck and hip are manually filled
+                        
+                        if idx >= len(obj['keypoints']) // 3:
+                            continue
+                        # if pt == 5 or pt == 14:
+                        #     continue  # Neck and hip are manually filled
                         joints[pt, 0] = obj['keypoints'][idx * 3 + 0]
                         joints[pt, 1] = obj['keypoints'][idx * 3 + 1]
                         t_vis = int(np.clip(obj['keypoints'][idx * 3 + 2], 0, 1))
@@ -233,15 +236,15 @@ class COCODataset(Dataset):
 
                 center, scale = self._box2cs(obj['clean_bbox'][:4])
 
-                # Add neck and c-hip (check utils/visualization.py for keypoints)
-                joints[5, 0] = (joints[6, 0] + joints[7, 0]) / 2
-                joints[5, 1] = (joints[6, 1] + joints[7, 1]) / 2
-                joints_visibility[5, :] = min(joints_visibility[6, 0],
-                                              joints_visibility[7, 0])
-                joints[14, 0] = (joints[12, 0] + joints[13, 0]) / 2
-                joints[14, 1] = (joints[12, 1] + joints[13, 1]) / 2
-                joints_visibility[14, :] = min(joints_visibility[12, 0],
-                                               joints_visibility[13, 0])
+                # # Add neck and c-hip (check utils/visualization.py for keypoints)
+                # joints[5, 0] = (joints[6, 0] + joints[7, 0]) / 2
+                # joints[5, 1] = (joints[6, 1] + joints[7, 1]) / 2
+                # joints_visibility[5, :] = min(joints_visibility[6, 0],
+                #                               joints_visibility[7, 0])
+                # joints[14, 0] = (joints[12, 0] + joints[13, 0]) / 2
+                # joints[14, 1] = (joints[12, 1] + joints[13, 1]) / 2
+                # joints_visibility[14, :] = min(joints_visibility[12, 0],
+                #                                joints_visibility[13, 0])
 
                 self.data.append({
                     'imgId': imgId,

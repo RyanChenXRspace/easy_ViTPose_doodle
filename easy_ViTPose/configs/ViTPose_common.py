@@ -23,7 +23,7 @@ lr_config = dict(
     warmup_ratio=0.001,
     step=[3])
 
-total_epochs = 4
+total_epochs = 1000
 target_type = 'GaussianHeatmap'
 
 data_cfg = dict(
@@ -39,26 +39,26 @@ data_cfg = dict(
     'COCO_val2017_detections_AP_H_56_person.json',
 )
 
-data_root = '/home/adryw/dataset/COCO17'
+data_root = './datasets/Doodle'
 data = dict(
-    samples_per_gpu=64,
-    workers_per_gpu=6,
+    samples_per_gpu=8,
+    workers_per_gpu=2,
     val_dataloader=dict(samples_per_gpu=128),
     test_dataloader=dict(samples_per_gpu=128),
     train=dict(
         type='TopDownCocoDataset',
-        ann_file=f'{data_root}/annotations/person_keypoints_train2017.json',
-        img_prefix=f'{data_root}/train2017/',
+        ann_file=f'{data_root}/annotations/train.json',
+        # img_prefix=f'{data_root}/val2017/',
         data_cfg=data_cfg),
     val=dict(
         type='TopDownCocoDataset',
-        ann_file=f'{data_root}/annotations/person_keypoints_val2017.json',
-        img_prefix=f'{data_root}/val2017/',
+        ann_file=f'{data_root}/annotations/train.json',
+        # img_prefix=f'{data_root}/val2017/',
         data_cfg=data_cfg),
     test=dict(
         type='TopDownCocoDataset',
-        ann_file=f'{data_root}/annotations/person_keypoints_val2017.json',
-        img_prefix=f'{data_root}/val2017/',
+        ann_file=f'{data_root}/annotations/train.json',
+        # img_prefix=f'{data_root}/val2017/',
         data_cfg=data_cfg)
 )
 

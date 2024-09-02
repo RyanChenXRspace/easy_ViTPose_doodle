@@ -80,14 +80,15 @@ if __name__ == "__main__":
         'Specify an output path if using save-img or save-json flags'
     output_path = args.output_path
     if output_path:
+        os.makedirs(output_path, exist_ok=True)
         if os.path.isdir(output_path):
             save_name_img = os.path.basename(input_path).replace(ext, f"_result{ext}")
             save_name_json = os.path.basename(input_path).replace(ext, "_result.json")
             output_path_img = os.path.join(output_path, save_name_img)
             output_path_json = os.path.join(output_path, save_name_json)
-        else:
-            output_path_img = output_path + f'{ext}'
-            output_path_json = output_path + '.json'
+        # else:
+        #     output_path_img = output_path + f'{ext}'
+        #     output_path_json = output_path + '.json'
 
     # Load the image / video reader
     try:  # Check if is webcam
@@ -117,7 +118,7 @@ if __name__ == "__main__":
                                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'),
                                          fps, output_size)  # type: ignore
     else:
-        reader = [np.array(Image.open(input_path).rotate(args.rotate))]  # type: ignore
+        reader = [np.array(Image.open(input_path).rotate(args.rotate))[...,:3]]  # type: ignore
 
     # Initialize model
     model = VitInference(args.model, yolo, args.model_name,

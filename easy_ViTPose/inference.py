@@ -124,7 +124,7 @@ class VitInference:
         if dataset is None:
             dataset = infer_dataset_by_path(model)
 
-        assert dataset in ['mpii', 'coco', 'coco_25', 'wholebody', 'aic', 'ap10k', 'apt36k'], \
+        assert dataset in ['doodle', 'mpii', 'coco', 'coco_25', 'wholebody', 'aic', 'ap10k', 'apt36k'], \
             'The specified dataset is not valid'
 
         # Dataset can now be set for visualization
@@ -255,6 +255,11 @@ class VitInference:
 
         if ids is None:
             ids = range(len(bboxes))
+            
+        if len(bboxes) == 0:
+            bboxes = np.array([[0, 0, img.shape[1], img.shape[0]]])
+            scores = np.array([1.0])
+            ids = range(len(bboxes))
 
         for bbox, id in zip(bboxes, ids):
             # TODO: Slightly bigger bbox
@@ -303,6 +308,7 @@ class VitInference:
         img = np.array(img)[..., ::-1]  # RGB to BGR for cv2 modules
         for idx, k in self._keypoints.items():
             img = draw_points_and_skeleton(img.copy(), k,
+                                           joints_dict()[self.dataset]['keypoints'],
                                            joints_dict()[self.dataset]['skeleton'],
                                            person_index=idx,
                                            points_color_palette='gist_rainbow',
