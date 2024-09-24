@@ -1,17 +1,16 @@
 import argparse
 import json
 import os
-import time
+from pathlib import Path
 
-from PIL import Image
 import cv2
 import numpy as np
 import torch
 import tqdm
-
-from easy_ViTPose.vit_utils.inference import NumpyEncoder, VideoReader
 from easy_ViTPose.inference import VitInference
+from easy_ViTPose.vit_utils.inference import NumpyEncoder
 from easy_ViTPose.vit_utils.visualization import joints_dict
+from PIL import Image
 
 try:
     import onnxruntime  # noqa: F401
@@ -81,99 +80,55 @@ if __name__ == "__main__":
     output_path = args.output_path
     if output_path:
         os.makedirs(output_path, exist_ok=True)
-        if os.path.isdir(output_path):
-            save_name_img = os.path.basename(input_path).replace(ext, f"_result{ext}")
-            save_name_json = os.path.basename(input_path).replace(ext, "_result.json")
-            output_path_img = os.path.join(output_path, save_name_img)
-            output_path_json = os.path.join(output_path, save_name_json)
-        # else:
-        #     output_path_img = output_path + f'{ext}'
-        #     output_path_json = output_path + '.json'
 
-    # Load the image / video reader
-    try:  # Check if is webcam
-        int(input_path)
-        is_video = True
-    except ValueError:
-        assert os.path.isfile(input_path), 'The input file does not exist'
-        is_video = input_path[input_path.rfind('.') + 1:].lower() in ['mp4', 'mov']
+    reader = []
+    image_name = []
+    if os.path.isfile(input_path):
+        reader = [np.array(Image.open(input_path).rotate(args.rotate))[..., :3]]  # type: ignore
+        image_name = [Path(input_path).name]
+    elif os.path.isdir(input_path):
+        folder_path = Path(input_path)
+        image_files = [file for file in folder_path.iterdir() if file.suffix in ['.png', '.jpg']]
 
-    wait = 0
-    total_frames = 1
-    if is_video:
-        reader = VideoReader(input_path, args.rotate)
-        cap = cv2.VideoCapture(input_path)  # type: ignore
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
-        wait = 15
-        if args.save_img:
-            cap = cv2.VideoCapture(input_path)  # type: ignore
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            ret, frame = cap.read()
-            cap.release()
-            assert ret
-            assert fps > 0
-            output_size = frame.shape[:2][::-1]
-            out_writer = cv2.VideoWriter(output_path_img,
-                                         cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'),
-                                         fps, output_size)  # type: ignore
-    else:
-        reader = [np.array(Image.open(input_path).rotate(args.rotate))[...,:3]]  # type: ignore
+        reader = []
+        image_name = []
+        for image_file in image_files:
+            image = np.array(Image.open(image_file).rotate(args.rotate))[..., :3]
+            if image.size:
+                reader.append(image)
+                image_name.append(image_file.name)
 
     # Initialize model
     model = VitInference(args.model, yolo, args.model_name,
                          args.det_class, args.dataset,
-                         args.yolo_size, is_video=is_video,
+                         args.yolo_size, is_video=False,
                          single_pose=args.single_pose,
                          yolo_step=args.yolo_step)  # type: ignore
     print(f">>> Model loaded: {args.model}")
 
     print(f'>>> Running inference on {input_path}')
     keypoints = []
-    fps = []
-    tot_time = 0.
-    for (ith, img) in tqdm.tqdm(enumerate(reader), total=total_frames):
-        t0 = time.time()
 
-        # Run inference
-        frame_keypoints = model.inference(img)
-        keypoints.append(frame_keypoints)
+    for ith, (img, img_name) in tqdm.tqdm(
+        enumerate(zip(reader, image_name)), total=len(reader)
+    ):
 
-        delta = time.time() - t0
-        tot_time += delta
-        fps.append(delta)
+        img_keypoints = model.inference(img)
 
-        # Draw the poses and save the output img
-        if args.show or args.save_img:
+        if args.save_img:
             # Draw result and transform to BGR
             img = model.draw(args.show_yolo, args.show_raw_yolo, args.conf_threshold)[..., ::-1]
 
-            if args.save_img:
-                # TODO: If exists add (1), (2), ...
-                if is_video:
-                    out_writer.write(img)
-                else:
-                    print('>>> Saving output image')
-                    cv2.imwrite(output_path_img, img)
+            print('>>> Saving output image')
+            output_img_path = os.path.join(output_path, f'{Path(img_name).stem}_result.png')
+            cv2.imwrite(output_img_path, img)
 
-            if args.show:
-                cv2.imshow('preview', img)
-                cv2.waitKey(wait)
-
-    if is_video:
-        tot_poses = sum(len(k) for k in keypoints)
-        print(f'>>> Mean inference FPS: {1 / np.mean(fps):.2f}')
-        print(f'>>> Total poses predicted: {tot_poses} mean per frame: '
-              f'{(tot_poses / (ith + 1)):.2f}')
-        print(f'>>> Mean FPS per pose: {(tot_poses / tot_time):.2f}')
-
-    if args.save_json:
-        print('>>> Saving output json')
-        with open(output_path_json, 'w') as f:
-            out = {'keypoints': keypoints,
-                   'skeleton': joints_dict()[model.dataset]['keypoints']}
-            json.dump(out, f, cls=NumpyEncoder)
-
-    if is_video and args.save_img:
-        out_writer.release()
-    cv2.destroyAllWindows()
+        if args.save_json:
+            print('>>> Saving output json')
+            output_json_path = os.path.join(output_path, f'{Path(img_name).stem}_result.json')
+            with open(output_json_path, 'w') as f:
+                out = {
+                    "keypoints": img_keypoints,
+                    "skeleton": joints_dict()[model.dataset]["keypoints"],
+                }
+                json.dump(out, f, cls=NumpyEncoder)
