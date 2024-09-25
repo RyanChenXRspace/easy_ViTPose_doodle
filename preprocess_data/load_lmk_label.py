@@ -5,33 +5,31 @@ import numpy as np
 import os
 import urllib.parse
 import shutil
-
+import random
 
 def main(label_groups: list[str]):
 
-    dataset_name = 'train'
+    dataset_name = 'Doodle'
 
     labels = merge_label_json(label_groups)
-    json_output_path, total_num_data = prepare_image_dataset(labels, dataset_name)
+    total_num_data = prepare_image_dataset(labels, dataset_name)
 
     plot_img_folder = os.path.abspath(f"{dataset_name}_plot")
     os.makedirs(plot_img_folder, exist_ok=True)
 
-    with open(f'{json_output_path}', 'r', encoding='utf-8') as f:
+    with open(f'{dataset_name}/train.json', 'r', encoding='utf-8') as f:
         res = json.load(f)
         print(f'total {len(res)} data')
         print(f'keys: {res[0].keys()}')
 
+    # plot landmark in training image
     for data in res:
         # data = res[0]
         normalized_keypoints = data.get('lmk')
         file_name = data.get('file')
 
         if normalized_keypoints:
-            img = cv2.imread(
-                os.path.join(f'./{dataset_name}', file_name),
-                cv2.IMREAD_COLOR
-            )
+            img = cv2.imread(os.path.join(f'{dataset_name}', 'data', file_name), cv2.IMREAD_COLOR)
             img = plot_joint_on_img(img, normalized_keypoints)
             cv2.imwrite(
                 os.path.join(plot_img_folder, f"{os.path.splitext(file_name)[0]}_disp.png"),
@@ -66,7 +64,7 @@ def resize_image(image_path, max_size=1024):
 
 def prepare_image_dataset(labels, out_folder):
 
-    out_img_folder = os.path.abspath(f"./{out_folder}")
+    out_img_folder = os.path.abspath(f"./{out_folder}/data")
     os.makedirs(out_img_folder, exist_ok=True)
 
     label_data_list = []
@@ -113,14 +111,29 @@ def prepare_image_dataset(labels, out_folder):
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    json_output_path = os.path.join(out_img_folder, f'{out_folder}.json')
+    idx = list(range(len(label_data_list)))
+    random.shuffle(idx)
+
+    os.makedirs(os.path.join(f"./{out_folder}", 'annotations'))
+    train_json_path = os.path.join(f"./{out_folder}", 'annotations', 'train.json')
+    train_idx = idx[:len(label_data_list)//10*9]
     try:
-        with open(json_output_path, 'w', encoding='utf-8') as json_file:
-            json.dump(label_data_list, json_file, ensure_ascii=False, indent=4)
+        with open(train_json_path, 'w', encoding='utf-8') as json_file:
+            train_list = [label_data_list[i] for i in train_idx]
+            json.dump(train_list, json_file, ensure_ascii=False, indent=4)
     except IOError as e:
         print(f"Error writing JSON file: {e}")
 
-    return json_output_path, len(label_data_list)
+    validation_json_path = os.path.join(f"./{out_folder}", 'annotations', 'validation.json')
+    validation_idx = idx[len(label_data_list)//10*9:]
+    try:
+        with open(validation_json_path, 'w', encoding='utf-8') as json_file:
+            validation_list = [label_data_list[i] for i in validation_idx]
+            json.dump(validation_list, json_file, ensure_ascii=False, indent=4)
+    except IOError as e:
+        print(f"Error writing JSON file: {e}")
+
+    return len(label_data_list)
 
 
 def parse_image_path(data: dict) -> str:

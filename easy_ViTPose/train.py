@@ -171,7 +171,7 @@ def main(config_path, model_name):
 
     datasets_valid = DoodleDataset(
         root_path=cfg.data_root,
-        data_version="train",
+        data_version="validation",
         is_train=False,
         use_gt_bboxes=True,
         image_width=192,
