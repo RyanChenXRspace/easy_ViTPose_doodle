@@ -18,43 +18,84 @@ from tqdm import tqdm
 from time import time
 
 from vit_utils.dist_util import get_dist_info, init_dist
+from vit_utils.top_down_eval import keypoints_from_heatmaps
+from vit_utils.visualization import draw_points_and_skeleton, joints_dict
 from vit_utils.logging import get_root_logger
 from collections import deque
 import wandb
+import numpy as np
 
 @torch.no_grad()
-def valid_model(model: nn.Module, dataloaders: DataLoader, criterion: nn.Module, cfg: dict) -> None:
+def valid_model(model: nn.Module, dataloaders: DataLoader, criterion: nn.Module, cfg: dict) -> float:
     total_loss = 0
     total_metric = 0
     model.eval()
     for dataloader in dataloaders:
+        
+        validation_img_plot = []
         for batch_idx, batch in enumerate(dataloader):
             images, targets, target_weights, __ = batch
             images = images.to('cuda')
             targets = targets.to('cuda')
             target_weights = target_weights.to('cuda')
-            
+
             outputs = model(images)
             loss = criterion(outputs, targets, target_weights)
             total_loss += loss.item()
-            
+
+            if cfg.enable_wandb:
+                if batch_idx < 2:
+
+                    N, K, H, W = images.shape
+                    points, prob = keypoints_from_heatmaps(
+                        heatmaps=outputs.detach().cpu().numpy(),
+                        center=np.tile([W // 2, H // 2], (N, 1)),
+                        scale=np.tile([W, H], (N, 1)),
+                        unbiased=True,
+                        use_udp=True,
+                    )
+                    combined = np.concatenate([points[:, :, ::-1], prob], axis=2)
+                    
+
+                    for i, img_tensor in enumerate(images):
+                        img = img_tensor.detach().cpu().numpy().copy()
+                        img = np.transpose(img, (1, 2, 0))
+                        img = (img * 255).astype(np.uint8)
+                        img = np.ascontiguousarray(img)
+                        
+                        img_plot = draw_points_and_skeleton(
+                            img,
+                            combined[i],
+                            joints_dict()[cfg.dataset]["keypoints"],
+                            joints_dict()[cfg.dataset]["skeleton"],
+                            points_color_palette="gist_rainbow",
+                            skeleton_color_palette="jet",
+                            points_palette_samples=10,
+                            confidence_threshold=0,
+                        )
+
+                        validation_img_plot.append(img_plot)
+
+        if cfg.enable_wandb:
+            wandb.log({"Validation Images": [wandb.Image(im) for im in validation_img_plot]}, commit=False)
+
     avg_loss = total_loss/(len(dataloader)*len(dataloaders))
     return avg_loss
- 
+
 def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Dataset, cfg: dict, distributed: bool, validate: bool,  timestamp: str, meta: dict) -> None:
     logger = get_root_logger()
-    
+
     # Prepare data loaders
     datasets_train = datasets_train if isinstance(datasets_train, (list, tuple)) else [datasets_train]
     datasets_valid = datasets_valid if isinstance(datasets_valid, (list, tuple)) else [datasets_valid]
-    
+
     if distributed:
         samplers_train = [DistributedSampler(ds, num_replicas=len(cfg.gpu_ids), rank=torch.cuda.current_device(), shuffle=True, drop_last=False) for ds in datasets_train]
         samplers_valid = [DistributedSampler(ds, num_replicas=len(cfg.gpu_ids), rank=torch.cuda.current_device(), shuffle=False, drop_last=False) for ds in datasets_valid]
     else:
         samplers_train = [None for ds in datasets_train]
         samplers_valid = [None for ds in datasets_valid]
-    
+
     dataloaders_train = [DataLoader(ds, batch_size=cfg.data['samples_per_gpu'], shuffle=True, sampler=sampler, num_workers=cfg.data['workers_per_gpu'], pin_memory=False) for ds, sampler in zip(datasets_train, samplers_train)]
     dataloaders_valid = [DataLoader(ds, batch_size=cfg.data['samples_per_gpu'], shuffle=False, sampler=sampler, num_workers=cfg.data['workers_per_gpu'], pin_memory=False) for ds, sampler in zip(datasets_valid, samplers_valid)]
 
@@ -74,15 +115,14 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
 
     # Loss function
     criterion = JointsMSELoss(use_target_weight=cfg.model['keypoint_head']['loss_keypoint']['use_target_weight'])
-    
+
     # Optimizer
     optimizer = AdamW(model.parameters(), lr=cfg.optimizer['lr'], betas=cfg.optimizer['betas'], weight_decay=cfg.optimizer['weight_decay'])
-    
+
     # Layer-wise learning rate decay
     lr_mult = [cfg.optimizer['paramwise_cfg']['layer_decay_rate']] * cfg.optimizer['paramwise_cfg']['num_layers']
     layerwise_optimizer = LayerDecayOptimizer(optimizer, lr_mult)
-    
-    
+
     # Learning rate scheduler (MultiStepLR)
     milestones = cfg.lr_config['step']
     gamma = 0.1
@@ -95,13 +135,13 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
         optimizer,
         lr_lambda=lambda step: warmup_factor + (1.0 - warmup_factor) * step / num_warmup_steps
     )
-    
+
     # AMP setting
     if cfg.use_amp:
         logger.info("Using Automatic Mixed Precision (AMP) training...")
         # Create a GradScaler object for FP16 training
         scaler = GradScaler()
-    
+
     # Logging config
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f'''\n
@@ -113,12 +153,12 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
     # - AMP: {cfg.use_amp}
     #===================================# 
     ''')
-    
+
     # Deque to store the latest 5 checkpoint filenames
     best_val_loss = float('inf')
     best_ckpt_path = None    
     ckpt_queue = deque(maxlen=5)
-    
+
     global_step = 0
     for dataloader in dataloaders_train:
         for epoch in range(cfg.total_epochs):
@@ -128,15 +168,12 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
             tic = time()
             for batch_idx, batch in enumerate(train_pbar):
                 layerwise_optimizer.zero_grad()
-                    
+
                 images, targets, target_weights, _ = batch
                 images = images.to('cuda')
                 targets = targets.to('cuda')
                 target_weights = target_weights.to('cuda')
-                
-                if cfg.enable_wandb and batch_idx % 1000 == 0:
-                    wandb.log({"images": [wandb.Image(im) for im in images]})
-                
+
                 if cfg.use_amp:
                     with autocast(device_type="cuda"):
                         outputs = model(images)
@@ -151,43 +188,83 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
                     loss.backward()
                     clip_grad_norm_(model.parameters(), **cfg.optimizer_config['grad_clip'])
                     layerwise_optimizer.step()
-                
+
                 if global_step < num_warmup_steps:
                     warmup_scheduler.step()
                 global_step += 1
-                
+
                 total_loss += loss.item()
                 train_pbar.set_description(f"🏋️> Epoch [{str(epoch).zfill(3)}/{str(cfg.total_epochs).zfill(3)}] | Loss {loss.item():.4f} | LR {optimizer.param_groups[0]['lr']:.6f} | Step")
+                
+                if cfg.enable_wandb and batch_idx == 0:
+
+                    N, K, H, W = images.shape
+                    points, prob = keypoints_from_heatmaps(
+                        heatmaps=outputs.detach().cpu().numpy().astype(np.float32),
+                        center=np.tile([W // 2, H // 2], (N, 1)),
+                        scale=np.tile([W, H], (N, 1)),
+                        unbiased=True,
+                        use_udp=True,
+                    )
+                    combined = np.concatenate([points[:, :, ::-1], prob], axis=2)
+                    
+                    train_img_plot = []
+                    for i, img_tensor in enumerate(images):
+                        img = img_tensor.detach().cpu().numpy().copy()
+                        img = np.transpose(img, (1, 2, 0))
+                        img = (img * 255).astype(np.uint8)
+                        img = np.ascontiguousarray(img)
+                        
+                        img_plot = draw_points_and_skeleton(
+                            img,
+                            combined[i],
+                            joints_dict()[cfg.dataset]["keypoints"],
+                            joints_dict()[cfg.dataset]["skeleton"],
+                            points_color_palette="gist_rainbow",
+                            skeleton_color_palette="jet",
+                            points_palette_samples=10,
+                            confidence_threshold=0,
+                        )
+
+                        train_img_plot.append(img_plot)
+
+                    wandb.log({"Training Images": [wandb.Image(im) for im in train_img_plot]}, commit=False)       
+                
             scheduler.step()
-            
+
             avg_loss_train = total_loss/len(dataloader)
             logger.info(f"[Summary-train] Epoch [{str(epoch).zfill(3)}/{str(cfg.total_epochs).zfill(3)}] | Average Loss (train) {avg_loss_train:.4f} --- {time()-tic:.5f} sec. elapsed")
             ckpt_name = f"epoch{str(epoch).zfill(3)}.pth"
             ckpt_path = osp.join(cfg.work_dir, ckpt_name)
             torch.save(model.module.state_dict(), ckpt_path)
-            
+
             # Manage checkpoints
             ckpt_queue.append(ckpt_path)
             if len(ckpt_queue) >= ckpt_queue.maxlen:
                 oldest_ckpt = ckpt_queue.popleft()
                 os.remove(oldest_ckpt)
-            
+
             # validation
             if validate:
                 tic2 = time()
                 avg_loss_valid = valid_model(model, dataloaders_valid, criterion, cfg)
                 logger.info(f"[Summary-valid] Epoch [{str(epoch).zfill(3)}/{str(cfg.total_epochs).zfill(3)}] | Average Loss (valid) {avg_loss_valid:.4f} --- {time()-tic2:.5f} sec. elapsed")
-                
+
                 # Track best model with minimum validation loss
                 if avg_loss_valid < best_val_loss:
                     best_val_loss = avg_loss_valid
                     best_ckpt_path = osp.join(cfg.work_dir, "best_model.pth")
                     torch.save(model.module.state_dict(), best_ckpt_path)
                     logger.info(f"New best model saved (epoch: {epoch}) with validation loss {best_val_loss:.4f} at {best_ckpt_path}")
-                
-                
+
                 if cfg.enable_wandb:
-                    wandb.log({"epoch": epoch + 1, "train_loss": avg_loss_train, "val_loss": avg_loss_valid})
+                    wandb.log(
+                        {
+                            "epoch": epoch + 1,
+                            "train_loss": avg_loss_train,
+                            "val_loss": avg_loss_valid
+                        }
+                    )
             else:
                 if cfg.enable_wandb:
                     wandb.log({"epoch": epoch + 1, "train_loss": avg_loss_train})

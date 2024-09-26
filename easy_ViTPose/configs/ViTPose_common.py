@@ -23,7 +23,7 @@ lr_config = dict(
     warmup_ratio=0.001,
     step=[3])
 
-total_epochs = 1000
+total_epochs = 300
 target_type = 'GaussianHeatmap'
 
 data_cfg = dict(
