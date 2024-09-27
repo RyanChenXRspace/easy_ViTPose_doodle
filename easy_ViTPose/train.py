@@ -197,6 +197,8 @@ def main(config_path, model_name):
         timestamp=timestamp,
         meta=meta,
     )
+    
+    wandb.finish()
 
 
 if __name__ == "__main__":
