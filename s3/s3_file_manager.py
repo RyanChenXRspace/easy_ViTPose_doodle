@@ -1,6 +1,7 @@
 import boto3
 import os
 import hashlib
+from utils import convert_image_to_png
 
 
 def download(bucket_name, prefix=None, local_download_directory='./downloads'):
@@ -28,14 +29,16 @@ def download(bucket_name, prefix=None, local_download_directory='./downloads'):
     if 'Contents' in response:
         for obj in response['Contents']:
             s3_key = obj['Key']
-            local_file_path = os.path.join(local_download_directory, s3_key)
-            local_file_path = os.path.splitext(local_file_path)[0] + '.png'
+            download_file_path = os.path.join(local_download_directory, s3_key)
+            download_file_path = os.path.splitext(download_file_path)[0]
 
             if s3_key not in downloaded_files:
-                os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+                os.makedirs(os.path.dirname(download_file_path), exist_ok=True)
 
-                print(f"Downloading {s3_key} to {local_file_path}")
-                s3.download_file(bucket_name, s3_key, local_file_path)
+                print(f"Downloading {s3_key} to {download_file_path}")
+                s3.download_file(bucket_name, s3_key, download_file_path)
+                convert_image_to_png(download_file_path)
+                os.remove(download_file_path)
                 print(f"Downloaded {s3_key} successfully.")
 
                 with open(downloaded_files_log, 'a') as log_file:
