@@ -38,7 +38,7 @@ def draw_bboxes(image, bounding_boxes, boxes_id, scores):
     return image_with_boxes
 
 
-def pad_image(image: np.ndarray, aspect_ratio: float) -> np.ndarray:
+def pad_image(image: np.ndarray, aspect_ratio: float) -> tuple[np.ndarray, tuple[int, int]]:
     # Get the current aspect ratio of the image
     image_height, image_width = image.shape[:2]
     current_aspect_ratio = image_width / image_height

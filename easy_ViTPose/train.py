@@ -31,7 +31,7 @@ from datasets.Doodle import DoodleDataset
 from vit_utils.train_valid_fn import train_model
 
 import wandb
-
+from dotenv import load_dotenv
 # CUR_PATH = osp.dirname(__file__)
 
 
@@ -141,14 +141,25 @@ def main(config_path, model_name):
         model.backbone._freeze_stages()
 
     if cfg.enable_wandb:
-        # start a new wandb run to track this script
-        wandb.init(
-            # set the wandb project where this run will be logged
-            project="doodle",
-            # track hyperparameters and run metadata
-            config={"data": cfg.data, 
-                    "data_cfg": cfg.data_cfg},
-        )
+        # start a new wandb run to track this script        
+        try:
+            load_dotenv()
+            wandb_key = os.getenv('WANDB_KEY')
+            login_success = wandb.login(key=wandb_key)
+            print(f'login W&B: {login_success}')
+            if login_success:
+                wandb.init(
+                    # set the wandb project where this run will be logged
+                    project="doodle",
+                    # track hyperparameters and run metadata
+                    config={"data": cfg.data, 
+                            "data_cfg": cfg.data_cfg},
+                )
+            else:
+                cfg.enable_wandb = False
+        except Exception as e:
+            print(f'Error login W&B: {e}')
+            cfg.enable_wandb = False
 
     # Set dataset
     datasets_train = DoodleDataset(

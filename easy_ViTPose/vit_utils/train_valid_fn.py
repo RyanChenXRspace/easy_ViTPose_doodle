@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import LambdaLR, MultiStepLR
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 # from torch.cuda.amp import autocast, GradScaler
-from torch.amp import autocast, GradScaler
+from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 from time import time
 
@@ -175,7 +175,7 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
                 target_weights = target_weights.to('cuda')
 
                 if cfg.use_amp:
-                    with autocast(device_type="cuda"):
+                    with autocast():
                         outputs = model(images)
                         loss = criterion(outputs, targets, target_weights)
                     scaler.scale(loss).backward()

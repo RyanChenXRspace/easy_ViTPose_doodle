@@ -6,6 +6,7 @@ import typing
 import cv2
 import numpy as np
 import torch
+from PIL import Image
 
 from ultralytics import YOLO
 
@@ -16,6 +17,11 @@ from .vit_utils.inference import draw_bboxes, pad_image
 from .vit_utils.top_down_eval import keypoints_from_heatmaps
 from .vit_utils.util import dyn_model_import, infer_dataset_by_path
 from .vit_utils.visualization import draw_points_and_skeleton, joints_dict
+
+from .remove_background.transparent_background import Remover
+from .remove_background.main import predict_mask
+from .remove_background.main import post_processing
+
 
 try:
     import torch_tensorrt
@@ -118,7 +124,6 @@ class VitInference:
         # Use extension to decide which kind of model has been loaded
         use_onnx = model.endswith('.onnx')
         use_trt = model.endswith('.engine')
-
 
         # Extract dataset name
         if dataset is None:
@@ -232,11 +237,19 @@ class VitInference:
         # First use YOLOv8 for detection
         res_pd = np.empty((0, 5))
         results = None
-        if (self.tracker is None or
-           (self.frame_counter % self.yolo_step == 0 or self.frame_counter < 3)):
-            results = self.yolo(img[..., ::-1], verbose=False, imgsz=self.yolo_size,
-                                device=self.device if self.device != 'cuda' else 0,
-                                classes=self.yolo_classes)[0]
+        
+        if self.tracker is None or (
+            self.frame_counter % self.yolo_step == 0 or self.frame_counter < 3
+        ):
+            
+            results = self.yolo(
+                img[..., ::-1],
+                verbose=False,
+                imgsz=self.yolo_size,
+                device=self.device if self.device != "cuda" else 0,
+                classes=self.yolo_classes,
+            )[0]
+
             res_pd = np.array([r[:5].tolist() for r in  # TODO: Confidence threshold
                                results.boxes.data.cpu().numpy() if r[4] > 0.35]).reshape((-1, 5))
         self.frame_counter += 1
@@ -245,6 +258,7 @@ class VitInference:
         scores_bbox = {}
         ids = None
         if self.tracker is not None:
+            #  a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
             res_pd = self.tracker.update(res_pd)
             ids = res_pd[:, 5].astype(int).tolist()
 
@@ -255,11 +269,18 @@ class VitInference:
 
         if ids is None:
             ids = range(len(bboxes))
-            
+
         if len(bboxes) == 0:
-            bboxes = np.array([[0, 0, img.shape[1], img.shape[0]]])
+            
+            self.remover = Remover.Remover(device='cuda')
+            _, raw_mask = predict_mask(self.remover, Image.fromarray(img))
+            _, bounding_box = post_processing(raw_mask)
+            
+            bboxes = np.array([list(bounding_box)])    
+            # bboxes = np.array([[0, 0, img.shape[1], img.shape[0]]])
             scores = np.array([1.0])
             ids = range(len(bboxes))
+            
 
         for bbox, id in zip(bboxes, ids):
             # TODO: Slightly bigger bbox
@@ -302,7 +323,8 @@ class VitInference:
         if self._yolo_res is not None and (show_raw_yolo or (self.tracker is None and show_yolo)):
             img = np.array(self._yolo_res.plot())[..., ::-1]
 
-        if show_yolo and self.tracker is not None:
+        # if show_yolo and self.tracker is not None:
+        if show_yolo:
             img = draw_bboxes(img, bboxes, ids, scores)
 
         img = np.array(img)[..., ::-1]  # RGB to BGR for cv2 modules

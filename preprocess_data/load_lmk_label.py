@@ -17,7 +17,7 @@ def main(label_groups: list[str]):
     plot_img_folder = os.path.abspath(f"{dataset_name}_plot")
     os.makedirs(plot_img_folder, exist_ok=True)
 
-    with open(f'{dataset_name}/train.json', 'r', encoding='utf-8') as f:
+    with open(os.path.join(dataset_name, 'annotations', 'train.json'), 'r', encoding='utf-8') as f:
         res = json.load(f)
         print(f'total {len(res)} data')
         print(f'keys: {res[0].keys()}')
@@ -114,7 +114,7 @@ def prepare_image_dataset(labels, out_folder):
     idx = list(range(len(label_data_list)))
     random.shuffle(idx)
 
-    os.makedirs(os.path.join(f"./{out_folder}", 'annotations'))
+    os.makedirs(os.path.join(f"./{out_folder}", 'annotations'), exist_ok=True)
     train_json_path = os.path.join(f"./{out_folder}", 'annotations', 'train.json')
     train_idx = idx[:len(label_data_list)//10*9]
     try:
@@ -237,6 +237,6 @@ if __name__ == '__main__':
     # JSON-MIN format from label studio v1.13.1
     export_list = [
         './label_json/project-1-at-2024-09-19-09-31-b014653a.json',
-        './label_json/project-7-at-2024-09-19-09-17-b447e130.json'
+        './label_json/project-7-at-2024-10-01-09-20-eedf4964.json'
     ]
     main(export_list)
