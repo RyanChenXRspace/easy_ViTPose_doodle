@@ -175,7 +175,7 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
                 target_weights = target_weights.to(cfg.device)
 
                 if cfg.use_amp:
-                    with autocast(device_type="cuda"):
+                    with autocast():
                         outputs = model(images)
                         loss = criterion(outputs, targets, target_weights)
                     scaler.scale(loss).backward()

@@ -13,7 +13,13 @@ RUN pip install --upgrade pip \
 
 RUN pip install json_tricks
 RUN pip install munkres
-
+RUN pip install gdown wget
+RUN pip install kornia timm
+RUN pip install opencv-python easydict wandb python-dotenv
 
 COPY ./requirements.txt /app
 COPY ./requirements_gpu.txt /app
+
+RUN pip install -r /app/requirements.txt
+
+

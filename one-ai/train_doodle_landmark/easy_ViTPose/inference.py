@@ -269,11 +269,18 @@ class VitInference:
 
         if ids is None:
             ids = range(len(bboxes))
-            
+
         if len(bboxes) == 0:
-            bboxes = np.array([[0, 0, img.shape[1], img.shape[0]]])
+            
+            self.remover = Remover.Remover(device='cuda')
+            _, raw_mask = predict_mask(self.remover, Image.fromarray(img))
+            _, bounding_box = post_processing(raw_mask)
+            
+            bboxes = np.array([list(bounding_box)])    
+            # bboxes = np.array([[0, 0, img.shape[1], img.shape[0]]])
             scores = np.array([1.0])
             ids = range(len(bboxes))
+            
 
         if len(bboxes) == 0:
             
