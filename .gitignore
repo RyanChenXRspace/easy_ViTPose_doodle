@@ -6,11 +6,11 @@
 .DS_Store
 **/runs
 **/datasets/*
+!**/datasets/Doodle_CI
 **/wandb/*
 ckpts
 input
 output
-annotations
 examples
 outputs
 .ipynb_checkpoints

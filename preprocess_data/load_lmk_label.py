@@ -6,6 +6,8 @@ import os
 import urllib.parse
 import shutil
 import random
+import argparse
+
 
 def main(label_groups: list[str]):
 
@@ -116,7 +118,8 @@ def prepare_image_dataset(labels, out_folder):
 
     os.makedirs(os.path.join(f"./{out_folder}", 'annotations'), exist_ok=True)
     train_json_path = os.path.join(f"./{out_folder}", 'annotations', 'train.json')
-    train_idx = idx[:len(label_data_list)//10*9]
+    split = int(len(label_data_list)*0.9)
+    train_idx = idx[:split]
     try:
         with open(train_json_path, 'w', encoding='utf-8') as json_file:
             train_list = [label_data_list[i] for i in train_idx]
@@ -125,7 +128,7 @@ def prepare_image_dataset(labels, out_folder):
         print(f"Error writing JSON file: {e}")
 
     validation_json_path = os.path.join(f"./{out_folder}", 'annotations', 'validation.json')
-    validation_idx = idx[len(label_data_list)//10*9:]
+    validation_idx = idx[split:]
     try:
         with open(validation_json_path, 'w', encoding='utf-8') as json_file:
             validation_list = [label_data_list[i] for i in validation_idx]
@@ -222,6 +225,7 @@ def merge_label_json(label_groups: list[str]):
     total_labels = []
 
     for label_path in label_groups:
+        print(os.path.abspath(label_path))
         with open(label_path, encoding='utf-8') as f:
             res = json.load(f)
             print(f'Add {len(res)} labels')
@@ -234,9 +238,14 @@ def merge_label_json(label_groups: list[str]):
 
 if __name__ == '__main__':
 
-    # JSON-MIN format from label studio v1.13.1
-    export_list = [
-        './label_json/project-1-at-2024-09-19-09-31-b014653a.json',
-        './label_json/project-7-at-2024-10-01-09-20-eedf4964.json'
-    ]
-    main(export_list)
+    parser = argparse.ArgumentParser(description='Process multiple JSON files.')
+    parser.add_argument(
+            'json_files',
+            nargs='*',
+            help='Specify one or more JSON files to process.',
+            default=['./label_json/project-1-at-2024-09-19-09-31-b014653a.json']  # JSON-MIN format from label studio v1.13.1
+        )
+
+    args = parser.parse_args()
+
+    main(args.json_files)

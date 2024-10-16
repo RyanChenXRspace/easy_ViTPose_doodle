@@ -26,42 +26,6 @@ lr_config = dict(
 total_epochs = 300
 target_type = 'GaussianHeatmap'
 
-data_cfg = dict(
-    image_size=[192, 256],
-    heatmap_size=[48, 64],
-    soft_nms=False,
-    nms_thr=1.0,
-    oks_thr=0.9,
-    vis_thr=0.2,
-    use_gt_bbox=False,
-    det_bbox_thr=0.0,
-    bbox_file='data/coco/person_detection_results/'
-    'COCO_val2017_detections_AP_H_56_person.json',
-)
-
-data_root = './datasets/Doodle'
-data = dict(
-    samples_per_gpu=8,
-    workers_per_gpu=2,
-    val_dataloader=dict(samples_per_gpu=128),
-    test_dataloader=dict(samples_per_gpu=128),
-    train=dict(
-        type='TopDownCocoDataset',
-        ann_file=f'{data_root}/annotations/train.json',
-        # img_prefix=f'{data_root}/val2017/',
-        data_cfg=data_cfg),
-    val=dict(
-        type='TopDownCocoDataset',
-        ann_file=f'{data_root}/annotations/train.json',
-        # img_prefix=f'{data_root}/val2017/',
-        data_cfg=data_cfg),
-    test=dict(
-        type='TopDownCocoDataset',
-        ann_file=f'{data_root}/annotations/train.json',
-        # img_prefix=f'{data_root}/val2017/',
-        data_cfg=data_cfg)
-)
-
 model_small = dict(
     type='TopDown',
     pretrained=None,

@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 
+*.json
 # Ignore all image files
 *.jpg
 *.jpeg
@@ -12,3 +13,4 @@ __pycache__/
 *.bmp
 *.tiff
 *.ico
+*.HEIC
