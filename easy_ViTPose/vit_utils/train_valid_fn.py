@@ -35,9 +35,9 @@ def valid_model(model: nn.Module, dataloaders: DataLoader, criterion: nn.Module,
         validation_img_plot = []
         for batch_idx, batch in enumerate(dataloader):
             images, targets, target_weights, __ = batch
-            images = images.to('cuda')
-            targets = targets.to('cuda')
-            target_weights = target_weights.to('cuda')
+            images = images.to(cfg.device)
+            targets = targets.to(cfg.device)
+            target_weights = target_weights.to(cfg.device)
 
             outputs = model(images)
             loss = criterion(outputs, targets, target_weights)
@@ -170,9 +170,9 @@ def train_model(model: nn.Module, datasets_train: Dataset, datasets_valid: Datas
                 layerwise_optimizer.zero_grad()
 
                 images, targets, target_weights, _ = batch
-                images = images.to('cuda')
-                targets = targets.to('cuda')
-                target_weights = target_weights.to('cuda')
+                images = images.to(cfg.device)
+                targets = targets.to(cfg.device)
+                target_weights = target_weights.to(cfg.device)
 
                 if cfg.use_amp:
                     with autocast():

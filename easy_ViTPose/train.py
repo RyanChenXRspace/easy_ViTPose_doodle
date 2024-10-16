@@ -57,12 +57,19 @@ def main(config_path, model_name):
     #        'l':l_cfg,
     #        'h':h_cfg}.get(model_name.lower())
     # Load config.yaml
+    cfg.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
     with open(config_path, "r") as f:
         cfg_yaml = yaml.load(f, Loader=yaml.SafeLoader)
 
     for k, v in cfg_yaml.items():
         if hasattr(cfg, k):
-            raise ValueError(f"Already exists {k} in config")
+            if k in ['total_epochs']:
+                print(f'Overwrite {k} from {getattr(cfg, k)} to {v}')
+                cfg.__setattr__(k, v)
+                
+            else:
+                raise ValueError(f"Already exists {k} in config")
         else:
             cfg.__setattr__(k, v)
 
@@ -119,16 +126,17 @@ def main(config_path, model_name):
     logger.info(f"Distributed training: {distributed}")
 
     # set random seeds
-    seed = init_random_seed(cfg.seed)
+    seed = init_random_seed(cfg.seed, device=cfg.device)
     logger.info(f"Set random seed to {seed}, " f"deterministic: {cfg.deterministic}")
     set_random_seed(seed, deterministic=cfg.deterministic)
     meta["seed"] = seed
 
+    
     # Set model
     model = ViTPose(cfg.model)
     if cfg.resume_from:
         # Load ckpt partially
-        ckpt_state = torch.load(cfg.resume_from)
+        ckpt_state = torch.load(cfg.resume_from, map_location=cfg.device)
         if not cfg.resume_keypoint_head_weight:
             ckpt_state.pop("keypoint_head.final_layer.bias")
             ckpt_state.pop("keypoint_head.final_layer.weight")
