@@ -58,6 +58,7 @@ def main(config_path, model_name):
     #        'h':h_cfg}.get(model_name.lower())
     # Load config.yaml
     cfg.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Device: {getattr(cfg, 'device')}")
     
     with open(config_path, "r") as f:
         cfg_yaml = yaml.load(f, Loader=yaml.SafeLoader)
