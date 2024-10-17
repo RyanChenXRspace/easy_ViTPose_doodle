@@ -4,22 +4,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update
 RUN apt-get install -y libgl1-mesa-glx
 RUN apt-get install -y libglib2.0-dev
+RUN apt-get install -y curl
 
-WORKDIR /app
+WORKDIR /workspaces
+COPY ./pyproject.toml ./poetry.lock /workspaces/
 
-
-RUN pip install --upgrade pip \
-    && pip install numpy pandas matplotlib
-
-RUN pip install json_tricks
-RUN pip install munkres
-RUN pip install gdown wget
-RUN pip install kornia timm
-RUN pip install opencv-python easydict wandb python-dotenv
-
-COPY ./requirements.txt /app
-COPY ./requirements_gpu.txt /app
-
-RUN pip install -r /app/requirements.txt
-
-
+RUN pip install --no-cache-dir poetry
+RUN poetry config virtualenvs.create false
+RUN poetry install --no-dev --no-interaction --no-ansi
