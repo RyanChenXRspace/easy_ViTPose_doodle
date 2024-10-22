@@ -1,0 +1,20 @@
+{
+    "build": {
+        "dockerfile": "../Dockerfile"
+    },
+    "name": "ezsy_vit_pose_train",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "mikoz.isort-formatter",
+                "ms-python.black-formatter",
+                "ms-python.python",
+                "ms-python.debugpy"
+            ]
+        }
+    },
+    "runArgs": [
+        "--gpus",
+        "all"
+    ]
+}
