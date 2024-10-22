@@ -1,3 +1,43 @@
+# ViTPose for Doodle Landmarks Detection
+This project fine-tunes the **ViTPose** model for detecting "body landmarks" in doodle images. The model is trained on custom doodle landmarks data using pretrained weights from the COCO dataset and can be evaluated on a validation or test dataset.
+
+## Prerequisite
+* Download pretrained weights from [here](https://huggingface.co/JunkyByte/easy_ViTPose/resolve/main/torch/coco/vitpose-h-coco.pth?download=true)
+* Put the pretrained weights in ./easy_ViTPose/checkpoints
+
+## Training
+1. Put dataset to ./easy_ViTPose/datasets/Doodle
+2. Start training
+```shell
+cd ./easy_ViTPose/
+python train.py --config-path ../config/config.yaml
+```
+3. Training result will be stored in ./easy_ViTPose/runs/train
+
+## Evaluation
+1. Download yolov8 pretrained weights from [here](https://huggingface.co/JunkyByte/easy_ViTPose/resolve/main/yolov8/yolov8s.pt?download=true)
+2. Put yolo model in ./checkpoints/yolov8s.pt
+3. 
+```
+ cd ./ 
+ python inference.py --input {your_image_path} \
+ --model {your_model_path} \
+ --model-name h \
+ --dataset doodle \
+ --yolo ./checkpoints/yolov8s.pt \
+ --output-path {output_image_path} \
+ --save-img --save-json --conf-threshold 0 
+```
+
+## Run training test using CPU by a small datasets
+1. Copy "./easy_ViTPose/datasets/Doodle_CI" to "./easy_ViTPose/datasets/Doodle"
+2. Start CI test by cpu training
+```shell
+cd ./easy_ViTPose/
+python train.py --config-path ../config/config_ci.yaml
+```
+
+
 # easy_ViTPose
 <p align="center">
 <img src="https://user-images.githubusercontent.com/24314647/236082274-b25a70c8-9267-4375-97b0-eddf60a7dfc6.png" width=375> easy_ViTPose
