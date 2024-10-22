@@ -10,7 +10,7 @@ from PIL import Image
 
 from ultralytics import YOLO
 
-from .configs.ViTPose_common import data_cfg
+from .configs.ViTPose_doodle import data_cfg
 from .sort import Sort
 from .vit_models.model import ViTPose
 from .vit_utils.inference import draw_bboxes, pad_image
